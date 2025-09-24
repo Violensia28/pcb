@@ -1,0 +1,38 @@
+
+(kicad_sch (version 20221018) (generator eeschema)
+  (paper "A4")
+  (title_block
+    (title "Universal Power Board v1.0 — Net Labels Map")
+    (company "Arif — Power Bus")
+    (rev "v1.0")
+    (date "2025-09-24 21:24")
+    (comment 1 "Cu 2 oz · FR-4 2.0 mm · HASL · 2-layer")
+  )
+  ; This schematic acts as a net label & interface map for the PCB-only workflow.
+  (text "BUSBAR & POWER" (at 30 30 0) (effects (font (size 2 2))))
+  (text "BUSP  : Busbar (+) → Drain MOSFET bank, Terminal JIN+/JOUT+" (at 30 40 0))
+  (text "BUSN  : Busbar (–) → Source MOSFET bank, Terminal JIN-/JOUT-" (at 30 46 0))
+  (text "M6    : Ø6.4 mm terminals (PTH annular both sides)" (at 30 52 0))
+
+  (text "GATE & SENSE" (at 30 66 0) (effects (font (size 2 2))))
+  (text "GATE1..GATE6 : Output driver to MOSFET gates (via Rg 2–5Ω, Rgs 10k)" (at 30 76 0))
+  (text "IMON(Kelvin) : Across shunt 2512 (RSENSE1/2) → ADC" (at 30 82 0))
+  (text "VMON         : Sense bus voltage via divider/point" (at 30 88 0))
+
+  (text "HEADERS" (at 150 30 0) (effects (font (size 2 2))))
+  (text "JCTRL (1x06, 2.54mm, TOP→BOTTOM): 1:GND  2:EN/TRIG  3:PWM  4:VMON  5:IMON  6:+5V" (at 150 40 0))
+  (text "J12V  (1x03, 2.54mm, TOP→BOTTOM): 1:GND  2:+12V  3:NC" (at 150 46 0))
+
+  (text "DRIVER SUPPLY" (at 150 62 0) (effects (font (size 2 2))))
+  (text "+12V_DRV : Supply TC4420 (decoup 100nF + 10µF near IC)" (at 150 72 0))
+  (text "GND      : Common return" (at 150 78 0))
+
+  (text "RELAY/PRE-CHARGE" (at 30 104 0) (effects (font (size 2 2))))
+  (text "RELAY_BYP : SRD-05VDC coil → +5V via driver, contacts across pre-charge" (at 30 114 0))
+  (text "PRECHARGE : 5–10Ω/5–10W in series before bypass" (at 30 120 0))
+
+  (text "Hints:" (at 30 136 0) (effects (font (size 2 2))))
+  (text "- Keep GATE traces short; place Rg at gate pin; add Rgs to source" (at 30 146 0))
+  (text "- Kelvin pick-off at shunt to JCTRL:IMON; keep away from high di/dt" (at 30 152 0))
+  (text "- Dense via-stitching on BUSP/BUSN, copper-to-edge ≥0.5–1.0mm" (at 30 158 0))
+)
