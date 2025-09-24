@@ -1,29 +1,49 @@
-name: Export Gerbers (KiCad CLI)
+
+name: Export Gerbers (KiCad CLI v1.0)
+
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "**/*.kicad_pcb"
+
 jobs:
   export:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Detect PCB
-        id: f
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect KiCad PCB
+        id: locate
         shell: bash
         run: |
+          set -e
           PCB=$(find . -maxdepth 3 -type f -name "*.kicad_pcb" | head -n1 || true)
-          [ -z "$PCB" ] && echo "::error ::Upload file .kicad_pcb (valid KiCad 8/9) lalu run ulang" && exit 1
+          if [ -z "$PCB" ]; then
+            echo "::error ::No .kicad_pcb found. Upload the KiCad board then run again."; exit 1
+          fi
           echo "pcb=$PCB" >> $GITHUB_OUTPUT
-      - name: Run KiCad actions (Gerber+Drill)
+
+      - name: Run KiCad actions (Gerber + Drill)
         uses: actions-for-kicad/kicad-actions@v1-k9.0
         with:
-          pcb_file_name: ${{ steps.f.outputs.pcb }}
+          pcb_file_name: ${{ steps.locate.outputs.pcb }}
           run_drc: false
           pcb_output_gerbers_and_drill: true
           pcb_output_image: true
-      - name: Zip & Upload
+
+      - name: Zip outputs
         shell: bash
-        run: cd gerbers && zip -r ../Gerber_UniversalPowerBoard.zip .
-      - uses: actions/upload-artifact@v4
+        run: |
+          test -d gerbers || (echo "::error ::Gerbers folder missing. Check KiCad log above."; exit 1)
+          cd gerbers
+          zip -r ../UPB_v1p0_Gerber_Final.zip .
+          cd ..
+          ls -lah UPB_v1p0_Gerber_Final.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: Gerber_UniversalPowerBoard
-          path: Gerber_UniversalPowerBoard.zip
+          name: UPB_v1p0_Gerber_Final
+          path: UPB_v1p0_Gerber_Final.zip
