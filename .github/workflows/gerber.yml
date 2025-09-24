@@ -1,7 +1,7 @@
 name: Export Gerbers (KiCad CLI)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:        # bisa dijalankan manual dari tab Actions
   push:
     paths:
       - "Universal_Power_Board.kicad_pcb"
@@ -10,26 +10,29 @@ jobs:
   export:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Action resmi untuk jalankan KiCad di CI
-      - name: Run KiCad actions (DRC off, export Gerber+Drill)
+      # Jalankan KiCad 9 via action resmi untuk export Gerber + Drill
+      - name: Run KiCad actions
         uses: actions-for-kicad/kicad-actions@v1-k9.0
         with:
           pcb_file_name: ./Universal_Power_Board.kicad_pcb
-          run_drc: false
-          pcb_output_gerbers_and_drill: true
-          pcb_output_image: true
+          run_drc: false                           # percepat; bisa true jika ingin
+          pcb_output_gerbers_and_drill: true      # <<< penting: hasilkan Gerber + Drill
+          pcb_output_image: true                  # opsional: PNG preview
 
-      - name: Zip Gerbers
+      # Zip-kan hasil (folder "gerbers" dibuat oleh action di atas)
+      - name: Zip gerbers
         run: |
           mkdir -p out
           cp -r gerbers/* out/ || true
           cd out
           zip -r ../Gerber_UniversalPowerBoard.zip .
           cd ..
-      - name: Upload artifact (Gerber ZIP)
+
+      # Upload artifact .zip agar bisa diunduh dari HP
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Gerber_UniversalPowerBoard
