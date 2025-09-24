@@ -1,1 +1,36 @@
+name: Export Gerbers (KiCad CLI)
 
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Universal_Power_Board.kicad_pcb"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Action resmi untuk jalankan KiCad di CI
+      - name: Run KiCad actions (DRC off, export Gerber+Drill)
+        uses: actions-for-kicad/kicad-actions@v1-k9.0
+        with:
+          pcb_file_name: ./Universal_Power_Board.kicad_pcb
+          run_drc: false
+          pcb_output_gerbers_and_drill: true
+          pcb_output_image: true
+
+      - name: Zip Gerbers
+        run: |
+          mkdir -p out
+          cp -r gerbers/* out/ || true
+          cd out
+          zip -r ../Gerber_UniversalPowerBoard.zip .
+          cd ..
+      - name: Upload artifact (Gerber ZIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gerber_UniversalPowerBoard
+          path: Gerber_UniversalPowerBoard.zip
