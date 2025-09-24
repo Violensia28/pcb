@@ -1,7 +1,117 @@
-- name: Run KiCad actions (DRC off, export Gerber+Drill)
-  uses: actions-for-kicad/kicad-actions@v1-k9.0
-  with:
-    pcb_file_name: ./Universal_Power_Board.kicad_pcb
-    run_drc: false
-    pcb_output_gerbers_and_drill: true
-    pcb_output_image: true
+name: Export Gerbers (KiCad CLI + Fallback)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**/*.kicad_pcb"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # === DETECT PCB & SANITY CHECK ===
+      - name: Detect KiCad PCB & sanity check
+        id: locate
+        shell: bash
+        run: |
+          set -e
+          echo "PWD: $PWD"
+          echo "TREE (level 2):"
+          find . -maxdepth 2 -type f -printf "%p (%k KB)\n" | sort || true
+
+          # Cari file PCB
+          PCB="$(find . -maxdepth 3 -type f -name '*.kicad_pcb' | head -n1 || true)"
+          if [ -z "$PCB" ]; then
+            echo "::error title=Tidak menemukan .kicad_pcb::Upload file .kicad_pcb ke repo (root/subfolder) atau ganti path di workflow."
+            exit 1
+          fi
+
+          # Cek header (kicad_pcb) agar jelas kalau file invalid
+          if ! head -n 5 "$PCB" | grep -q "(kicad_pcb"; then
+            echo "::warning title=Header PCB mencurigakan::$PCB tidak memiliki '(kicad_pcb' pada awal file. KiCad bisa gagal load."
+          fi
+
+          SIZE=$(stat -c%s "$PCB" 2>/dev/null || stat -f%z "$PCB" 2>/dev/null || echo 0)
+          echo "✅ PCB ditemukan: $PCB (size: ${SIZE} bytes)"
+          echo "pcb=$PCB" >> "$GITHUB_OUTPUT"
+
+          echo "---- HEAD of PCB ----"
+          head -n 60 "$PCB" || true
+
+      # === JALUR-A: ACTION KiCad (resmi) ===
+      - name: Run KiCad actions (DRC off, export Gerber+Drill)
+        id: kicad_action
+        uses: actions-for-kicad/kicad-actions@v1-k9.0
+        continue-on-error: true
+        with:
+          pcb_file_name: ${{ steps.locate.outputs.pcb }}   # <<< FIX UTAMA
+          run_drc: false
+          pcb_output_gerbers_and_drill: true
+          pcb_output_image: true
+
+      # === CEK HASIL ===
+      - name: Check gerbers from Action
+        id: check_action
+        shell: bash
+        run: |
+          if [ -d "gerbers" ] && [ -n "$(ls -A gerbers)" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Gerbers ditemukan dari Action."
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Gerbers tidak ditemukan dari Action::Akan coba fallback container."
+          fi
+
+      # === JALUR-B: FALLBACK (container KiCad CLI langsung) ===
+      - name: Export via Container (fallback kicad-cli)
+        if: steps.check_action.outputs.ok != 'true'
+        shell: bash
+        run: |
+          set -e
+          PCB="${{ steps.locate.outputs.pcb }}"
+          mkdir -p gerbers
+
+          echo "🔁 Fallback: jalankan kicad-cli dalam container..."
+          # Coba image KiCad automation (berbasis KiCad 6/9). Gunakan yang tersedia/lebih baru.
+          docker run --rm -v "$PWD":/work ghcr.io/inti-cmnb/kicad9_auto:latest \
+            bash -lc "kicad-cli pcb export gerbers /work/$PCB \
+              --output /work/gerbers \
+              --layers F.Cu,B.Cu,F.Mask,B.Mask,F.SilkS,B.SilkS,Edge.Cuts \
+              --subtract-soldermask-from-silk \
+              --no-x2 || exit 2"
+
+          docker run --rm -v "$PWD":/work ghcr.io/inti-cmnb/kicad9_auto:latest \
+            bash -lc "kicad-cli pcb export drill /work/$PCB \
+              --output /work/gerbers \
+              --format excellon \
+              --drill-origin absolute \
+              --units mm || exit 3"
+
+          echo "✅ Fallback menghasilkan gerbers:"
+          ls -lah gerbers || true
+
+      # === ZIP HASIL ===
+      - name: Zip Gerbers
+        shell: bash
+        run: |
+          if [ ! -d "gerbers" ] || [ -z "$(ls -A gerbers)" ]; then
+            echo "::error title=Export gagal::Folder 'gerbers' kosong/tidak ada. Lihat log step di atas."
+            exit 1
+          fi
+          mkdir -p out
+          cp -r gerbers/* out/ || true
+          [ -f "pcb.png" ] && cp pcb.png out/
+          cd out
+          zip -r ../Gerber_UniversalPowerBoard.zip .
+          cd ..
+          ls -lah Gerber_UniversalPowerBoard.zip
+
+      - name: Upload artifact (Gerber ZIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gerber_UniversalPowerBoard
+          path: Gerber_UniversalPowerBoard.zip
