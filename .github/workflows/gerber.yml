@@ -14,49 +14,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # DEBUG: lihat isi repo & cari file .kicad_pcb
-      - name: Debug tree & detect PCB
-        id: detect
+      # DEBUG + DETECT PCB: cari .kicad_pcb dan pastikan tidak kosong
+      - name: Detect KiCad PCB & sanity check
+        id: locate
         shell: bash
         run: |
-          echo "PWD: $(pwd)"
-          echo "TREE:" && ls -lah
-          PCB=$(find . -maxdepth 2 -type f -name "*.kicad_pcb" | head -n1)
+          set -e
+          echo "PWD: $PWD"
+          echo "TREE (level 2):"
+          find . -maxdepth 2 -type f -printf "%p (%k KB)\n" | sort
+          PCB="$(find . -maxdepth 3 -type f -name '*.kicad_pcb' | head -n1 || true)"
           if [ -z "$PCB" ]; then
-            echo "❌ Tidak menemukan file .kicad_pcb di root/level-2"
+            echo "::error title=Tidak menemukan .kicad_pcb::Upload file .kicad_pcb ke repo (root/subfolder), atau set pcb_file_name manual."
             exit 1
           fi
-          echo "✅ Ditemukan PCB: $PCB"
+          # Minimal sanity: file harus berisi header (kicad_pcb
+          if ! head -n 5 "$PCB" | grep -q "(kicad_pcb"; then
+            echo "::warning title=File PCB mencurigakan::$PCB tidak memiliki header (kicad_pcb). KiCad bisa gagal load."
+          fi
+          SIZE=$(stat -c%s "$PCB" || stat -f%z "$PCB")
+          echo "✅ Ditemukan PCB: $PCB (size: ${SIZE} bytes)"
           echo "pcb=$PCB" >> "$GITHUB_OUTPUT"
           echo "---- HEAD of PCB ----"
           head -n 60 "$PCB" || true
 
-      # Jalankan KiCad (kicad-cli) via action resmi untuk export Gerber + Drill
-      # Action: actions-for-kicad/kicad-actions → membungkus kicad-cli (KiCad 9)
-      - name: Run KiCad actions (export Gerber+Drill)
+      # JALANKAN KiCad (kicad-cli) via action resmi
+      - name: Run KiCad actions (DRC off, export Gerber+Drill)
         uses: actions-for-kicad/kicad-actions@v1-k9.0
         with:
-          pcb_file_name: ${{ steps.detect.outputs.pcb }}
+          pcb_file_name: ${{ steps.locate.outputs.pcb }}    # <— FIX UTAMA
           run_drc: false
           pcb_output_gerbers_and_drill: true
           pcb_output_image: true
 
-      # ZIP hasil plot agar mudah diunduh sebagai satu paket
+      # ZIP hasil agar mudah diunduh dari Artifacts
       - name: Zip Gerbers
         shell: bash
         run: |
           mkdir -p out
-          # Folder 'gerbers' dan file drill dibuat oleh action di atas
-          if [ -d "gerbers" ]; then
-            cp -r gerbers/* out/ || true
+          # Action di atas menaruh hasil di folder "gerbers"
+          if [ ! -d "gerbers" ]; then
+            echo "::error title=Folder gerbers tidak ditemukan::Export gagal. Periksa log step KiCad actions di atas."
+            exit 1
           fi
-          # Simpan juga preview PNG kalau tersedia
+          cp -r gerbers/* out/ || true
           [ -f "pcb.png" ] && cp pcb.png out/
           cd out
           zip -r ../Gerber_UniversalPowerBoard.zip .
           cd ..
+          ls -lah Gerber_UniversalPowerBoard.zip
 
-      - name: Upload artifact
+      - name: Upload artifact (Gerber ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: Gerber_UniversalPowerBoard
