@@ -4,34 +4,58 @@ on:
   workflow_dispatch:        # bisa dijalankan manual dari tab Actions
   push:
     paths:
-      - "Universal_Power_Board.kicad_pcb"
+      - "**/*.kicad_pcb"
 
 jobs:
   export:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Jalankan KiCad 9 via action resmi untuk export Gerber + Drill
-      - name: Run KiCad actions
+      # DEBUG: lihat isi repo & cari file .kicad_pcb
+      - name: Debug tree & detect PCB
+        id: detect
+        shell: bash
+        run: |
+          echo "PWD: $(pwd)"
+          echo "TREE:" && ls -lah
+          PCB=$(find . -maxdepth 2 -type f -name "*.kicad_pcb" | head -n1)
+          if [ -z "$PCB" ]; then
+            echo "❌ Tidak menemukan file .kicad_pcb di root/level-2"
+            exit 1
+          fi
+          echo "✅ Ditemukan PCB: $PCB"
+          echo "pcb=$PCB" >> "$GITHUB_OUTPUT"
+          echo "---- HEAD of PCB ----"
+          head -n 60 "$PCB" || true
+
+      # Jalankan KiCad (kicad-cli) via action resmi untuk export Gerber + Drill
+      # Action: actions-for-kicad/kicad-actions → membungkus kicad-cli (KiCad 9)
+      - name: Run KiCad actions (export Gerber+Drill)
         uses: actions-for-kicad/kicad-actions@v1-k9.0
         with:
-          pcb_file_name: ./Universal_Power_Board.kicad_pcb
-          run_drc: false                           # percepat; bisa true jika ingin
-          pcb_output_gerbers_and_drill: true      # <<< penting: hasilkan Gerber + Drill
-          pcb_output_image: true                  # opsional: PNG preview
+          pcb_file_name: ${{ steps.detect.outputs.pcb }}
+          run_drc: false
+          pcb_output_gerbers_and_drill: true
+          pcb_output_image: true
 
-      # Zip-kan hasil (folder "gerbers" dibuat oleh action di atas)
-      - name: Zip gerbers
+      # ZIP hasil plot agar mudah diunduh sebagai satu paket
+      - name: Zip Gerbers
+        shell: bash
         run: |
           mkdir -p out
-          cp -r gerbers/* out/ || true
+          # Folder 'gerbers' dan file drill dibuat oleh action di atas
+          if [ -d "gerbers" ]; then
+            cp -r gerbers/* out/ || true
+          fi
+          # Simpan juga preview PNG kalau tersedia
+          [ -f "pcb.png" ] && cp pcb.png out/
           cd out
           zip -r ../Gerber_UniversalPowerBoard.zip .
           cd ..
 
-      # Upload artifact .zip agar bisa diunduh dari HP
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
