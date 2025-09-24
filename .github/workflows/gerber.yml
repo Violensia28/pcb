@@ -1,7 +1,7 @@
 - name: Run KiCad actions (DRC off, export Gerber+Drill)
   uses: actions-for-kicad/kicad-actions@v1-k9.0
   with:
-    pcb_file_name: ./pcb/Universal_Power_Board.kicad_pcb
+    pcb_file_name: ./Universal_Power_Board.kicad_pcb
     run_drc: false
     pcb_output_gerbers_and_drill: true
     pcb_output_image: true
